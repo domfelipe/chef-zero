@@ -1,0 +1,1076 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="ChefZero ajuda a encontrar receitas com ingredientes que ja existem em casa, usando busca local e uma inspiracao diaria via API publica."
+    />
+    <title>ChefZero | Cozinha sem desperdicio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Geist', 'ui-sans-serif', 'system-ui'],
+              mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular']
+            },
+            colors: {
+              paper: '#f6f1e7',
+              ink: '#1f211d',
+              olive: '#596b45',
+              clay: '#b96141',
+              butter: '#d6a84d'
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f6f1e7;
+        --paper-deep: #ece3d2;
+        --ink: #1f211d;
+        --muted: #6d7066;
+        --line: rgba(31, 33, 29, 0.14);
+        --olive: #596b45;
+        --clay: #b96141;
+        --butter: #d6a84d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-height: 100dvh;
+        margin: 0;
+        background:
+          linear-gradient(90deg, rgba(31, 33, 29, 0.04) 1px, transparent 1px) 0 0 / 48px 48px,
+          linear-gradient(rgba(31, 33, 29, 0.04) 1px, transparent 1px) 0 0 / 48px 48px,
+          radial-gradient(circle at 85% 10%, rgba(214, 168, 77, 0.2), transparent 30%),
+          var(--paper);
+        color: var(--ink);
+        font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif;
+      }
+
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.25;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.36'/%3E%3C/svg%3E");
+        mix-blend-mode: multiply;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        transition: transform 180ms ease, border-color 180ms ease, background 180ms ease,
+          color 180ms ease, opacity 180ms ease;
+      }
+
+      button:active {
+        transform: translateY(1px) scale(0.99);
+      }
+
+      .surface {
+        min-width: 0;
+        border: 1px solid var(--line);
+        background: rgba(255, 252, 245, 0.76);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55),
+          0 24px 70px rgba(80, 67, 42, 0.12);
+        backdrop-filter: blur(18px);
+        border-radius: 8px;
+      }
+
+      .soft-panel {
+        min-width: 0;
+        border: 1px solid rgba(31, 33, 29, 0.12);
+        background: rgba(255, 252, 245, 0.58);
+        border-radius: 8px;
+      }
+
+      .recipe-card {
+        animation: rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        animation-delay: calc(var(--index, 0) * 70ms);
+      }
+
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .skeleton {
+        position: relative;
+        overflow: hidden;
+        background: rgba(31, 33, 29, 0.08);
+      }
+
+      .skeleton::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        transform: translateX(-100%);
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+        animation: shimmer 1.4s infinite;
+      }
+
+      @keyframes shimmer {
+        to {
+          transform: translateX(100%);
+        }
+      }
+
+      .status-dot {
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 999px;
+        background: var(--butter);
+        box-shadow: 0 0 0 0 rgba(214, 168, 77, 0.4);
+        animation: breathe 2.2s ease-in-out infinite;
+      }
+
+      .status-dot[data-state='online'] {
+        background: var(--olive);
+      }
+
+      .status-dot[data-state='offline'] {
+        background: var(--clay);
+      }
+
+      @keyframes breathe {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(89, 107, 69, 0.24);
+        }
+
+        50% {
+          box-shadow: 0 0 0 8px rgba(89, 107, 69, 0);
+        }
+      }
+
+      .modal {
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+      }
+
+      .modal[data-open='true'] {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .modal[data-open='true'] .modal-panel {
+        transform: translateY(0) scale(1);
+      }
+
+      .modal-panel {
+        transform: translateY(14px) scale(0.98);
+        transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+
+      .line-clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+          transition-duration: 0.001ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="relative mx-auto flex min-h-[100dvh] w-full max-w-[1500px] flex-col px-4 py-4 sm:px-6 lg:px-8">
+      <header class="surface mb-4 flex items-center justify-between gap-4 px-4 py-3">
+        <a class="flex min-w-0 items-center gap-3" href="./" aria-label="ChefZero">
+          <span class="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-ink text-paper">
+            <i data-lucide="chef-hat" class="h-5 w-5"></i>
+          </span>
+          <span class="min-w-0">
+            <span class="block truncate text-lg font-bold tracking-tight">ChefZero</span>
+            <span class="block truncate text-xs font-medium uppercase tracking-[0.16em] text-stone-500"
+              >cozinha sem desperdicio</span
+            >
+          </span>
+        </a>
+
+        <div class="hidden items-center gap-3 text-sm text-stone-600 md:flex">
+          <span class="flex items-center gap-2 rounded-[8px] border border-black/10 bg-white/40 px-3 py-2">
+            <i data-lucide="database" class="h-4 w-4"></i>
+            Base local
+          </span>
+          <span id="apiPill" class="flex items-center gap-2 rounded-[8px] border border-black/10 bg-white/40 px-3 py-2">
+            <span id="apiDot" class="status-dot" data-state="loading"></span>
+            <span id="apiStatus">Conectando API</span>
+          </span>
+        </div>
+      </header>
+
+      <main class="grid flex-1 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(360px,0.8fr)]">
+        <section class="surface flex min-h-[calc(100dvh-112px)] min-w-0 flex-col overflow-hidden">
+          <div class="grid gap-6 border-b border-black/10 p-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)] lg:p-7">
+            <div class="flex flex-col justify-between gap-5">
+              <div>
+                <p class="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-clay">
+                  Motor local com API keyless
+                </p>
+                <h1 class="max-w-3xl text-4xl font-black leading-[0.96] tracking-tight text-ink md:text-6xl">
+                  Cozinhe com o que ja existe na sua cozinha.
+                </h1>
+              </div>
+
+              <div class="grid gap-3 sm:grid-cols-3">
+                <div class="soft-panel px-4 py-3">
+                  <span id="recipeCount" class="font-mono text-2xl font-semibold">0</span>
+                  <p class="mt-1 text-sm text-stone-600">receitas ranqueadas</p>
+                </div>
+                <div class="soft-panel px-4 py-3">
+                  <span id="savingScore" class="font-mono text-2xl font-semibold">R$ 0</span>
+                  <p class="mt-1 text-sm text-stone-600">potencial poupado</p>
+                </div>
+                <div class="soft-panel px-4 py-3">
+                  <span id="matchAverage" class="font-mono text-2xl font-semibold">0%</span>
+                  <p class="mt-1 text-sm text-stone-600">encaixe medio</p>
+                </div>
+              </div>
+            </div>
+
+            <form id="ingredientForm" class="soft-panel flex flex-col gap-4 p-4" autocomplete="off">
+              <div class="space-y-2">
+                <label class="text-sm font-semibold text-ink" for="ingredientInput">Ingredientes em casa</label>
+                <div class="flex gap-2">
+                  <input
+                    id="ingredientInput"
+                    class="min-w-0 flex-1 rounded-[8px] border border-black/15 bg-white/70 px-3 py-3 text-base outline-none transition focus:border-olive focus:ring-4 focus:ring-olive/15"
+                    placeholder="arroz, ovos, tomate"
+                    type="text"
+                  />
+                  <button
+                    class="grid h-[50px] w-[50px] shrink-0 place-items-center rounded-[8px] bg-ink text-paper hover:bg-olive"
+                    type="submit"
+                    aria-label="Adicionar ingrediente"
+                  >
+                    <i data-lucide="plus" class="h-5 w-5"></i>
+                  </button>
+                </div>
+                <p id="inputError" class="min-h-5 text-sm font-medium text-clay"></p>
+              </div>
+
+              <div>
+                <div id="selectedIngredients" class="flex min-h-[42px] flex-wrap gap-2"></div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  data-filter="rapido"
+                  class="filter-btn rounded-[8px] border border-black/10 bg-white/55 px-3 py-2 text-sm font-semibold hover:border-olive"
+                >
+                  rapido
+                </button>
+                <button
+                  type="button"
+                  data-filter="barato"
+                  class="filter-btn rounded-[8px] border border-black/10 bg-white/55 px-3 py-2 text-sm font-semibold hover:border-olive"
+                >
+                  barato
+                </button>
+                <button
+                  type="button"
+                  data-filter="vegetariano"
+                  class="filter-btn rounded-[8px] border border-black/10 bg-white/55 px-3 py-2 text-sm font-semibold hover:border-olive"
+                >
+                  vegetariano
+                </button>
+                <button
+                  type="button"
+                  data-filter="uma-panela"
+                  class="filter-btn rounded-[8px] border border-black/10 bg-white/55 px-3 py-2 text-sm font-semibold hover:border-olive"
+                >
+                  uma panela
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div class="grid gap-4 border-b border-black/10 px-5 py-4 md:grid-cols-[auto_1fr_auto] lg:px-7">
+            <div class="flex items-center gap-2 text-sm font-semibold text-stone-700">
+              <i data-lucide="sparkles" class="h-4 w-4 text-clay"></i>
+              Sugestoes rapidas
+            </div>
+            <div id="suggestions" class="flex flex-wrap gap-2"></div>
+            <button
+              id="resetBtn"
+              type="button"
+              class="rounded-[8px] border border-black/10 bg-white/45 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-clay hover:text-clay"
+            >
+              limpar
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-auto p-5 lg:p-7">
+            <div id="emptyState" class="hidden min-h-[320px] place-items-center text-center">
+              <div class="max-w-md">
+                <div class="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-[8px] bg-ink text-paper">
+                  <i data-lucide="search" class="h-6 w-6"></i>
+                </div>
+                <h2 class="text-2xl font-bold tracking-tight">Nenhuma receita encontrada</h2>
+                <p class="mt-2 text-stone-600">
+                  Ajuste os ingredientes ou remova filtros para ampliar as combinacoes disponiveis.
+                </p>
+              </div>
+            </div>
+            <div id="recipeGrid" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"></div>
+          </div>
+        </section>
+
+        <aside class="grid min-w-0 gap-4 lg:grid-rows-[auto_1fr_auto]">
+          <section class="surface overflow-hidden">
+            <div class="flex min-w-0 items-center justify-between gap-3 border-b border-black/10 px-4 py-4 sm:px-5">
+              <div class="min-w-0">
+                <h2 class="text-lg font-bold tracking-tight">Inspiracao do Dia</h2>
+                <p class="truncate text-sm text-stone-600">TheMealDB, sem chave de acesso</p>
+              </div>
+              <button
+                id="refreshApiBtn"
+                class="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-black/10 bg-white/50 hover:border-olive"
+                type="button"
+                aria-label="Atualizar inspiracao"
+              >
+                <i data-lucide="refresh-cw" class="h-4 w-4"></i>
+              </button>
+            </div>
+            <div id="apiCard" class="p-5">
+              <div class="skeleton mb-4 aspect-[4/3] rounded-[8px]"></div>
+              <div class="skeleton mb-2 h-5 w-2/3 rounded-[8px]"></div>
+              <div class="skeleton h-4 w-full rounded-[8px]"></div>
+            </div>
+          </section>
+
+          <section class="surface p-5">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <h2 class="text-lg font-bold tracking-tight">Plano de cozinha</h2>
+              <i data-lucide="list-checks" class="h-5 w-5 text-olive"></i>
+            </div>
+            <div id="kitchenPlan" class="space-y-3"></div>
+          </section>
+
+          <section class="surface p-5">
+            <div class="flex items-start gap-3">
+              <div class="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] bg-olive text-white">
+                <i data-lucide="shield-check" class="h-5 w-5"></i>
+              </div>
+              <div>
+                <h2 class="text-base font-bold">Arquitetura sem secrets</h2>
+                <p class="mt-1 text-sm leading-6 text-stone-600">
+                  A busca principal usa dados locais auditaveis. A API publica apenas enriquece a experiencia,
+                  entao a pagina continua funcionando mesmo se o servico externo cair.
+                </p>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <div id="recipeModal" class="modal fixed inset-0 z-40 grid place-items-end bg-ink/45 p-3 md:place-items-center" data-open="false">
+      <article
+        class="modal-panel max-h-[92dvh] w-full max-w-3xl overflow-hidden rounded-[8px] bg-[#fffaf0] shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modalTitle"
+      >
+        <div class="flex items-center justify-between gap-3 border-b border-black/10 px-5 py-4">
+          <h2 id="modalTitle" class="text-xl font-bold tracking-tight"></h2>
+          <button
+            id="closeModalBtn"
+            class="grid h-10 w-10 shrink-0 place-items-center rounded-[8px] border border-black/10 bg-white/60 hover:border-clay"
+            type="button"
+            aria-label="Fechar detalhes"
+          >
+            <i data-lucide="x" class="h-5 w-5"></i>
+          </button>
+        </div>
+        <div id="modalBody" class="max-h-[calc(92dvh-73px)] overflow-auto p-5"></div>
+      </article>
+    </div>
+
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script>
+      const recipes = [
+        {
+          id: 'arroz-cremoso-forno',
+          name: 'Arroz cremoso de forno',
+          image: 'https://www.themealdb.com/images/media/meals/wvpsxx1468256321.jpg',
+          time: 24,
+          cost: 14.8,
+          servings: 3,
+          difficulty: 'facil',
+          tags: ['barato', 'uma-panela', 'almoco'],
+          ingredients: ['arroz', 'ovos', 'tomate', 'queijo', 'cebola'],
+          steps: [
+            'Refogue cebola e tomate ate formar um molho curto.',
+            'Misture arroz cozido, ovos batidos e queijo ralado.',
+            'Leve ao forno alto ate a superficie ficar firme e dourada.'
+          ]
+        },
+        {
+          id: 'omelete-verde',
+          name: 'Omelete verde de frigideira',
+          image: 'https://www.themealdb.com/images/media/meals/1548772327.jpg',
+          time: 12,
+          cost: 9.4,
+          servings: 2,
+          difficulty: 'facil',
+          tags: ['rapido', 'barato', 'vegetariano'],
+          ingredients: ['ovos', 'espinafre', 'cebola', 'tomate', 'queijo'],
+          steps: [
+            'Bata os ovos com sal e pimenta.',
+            'Salteie cebola, tomate e espinafre por dois minutos.',
+            'Junte os ovos e cozinhe em fogo baixo ate firmar.'
+          ]
+        },
+        {
+          id: 'macarrao-alho-couve',
+          name: 'Macarrao alho e couve',
+          image: 'https://www.themealdb.com/images/media/meals/ustsqw1468250014.jpg',
+          time: 18,
+          cost: 12.2,
+          servings: 2,
+          difficulty: 'facil',
+          tags: ['rapido', 'barato', 'vegetariano'],
+          ingredients: ['macarrao', 'alho', 'couve', 'azeite', 'limão'],
+          steps: [
+            'Cozinhe o macarrao e reserve meia concha da agua.',
+            'Doure alho no azeite e entre com a couve fatiada.',
+            'Misture a massa, ajuste com agua do cozimento e finalize com limao.'
+          ]
+        },
+        {
+          id: 'sopa-abobora-lentilha',
+          name: 'Sopa de abobora e lentilha',
+          image: 'https://www.themealdb.com/images/media/meals/stpuws1511191310.jpg',
+          time: 32,
+          cost: 16.9,
+          servings: 4,
+          difficulty: 'media',
+          tags: ['barato', 'vegetariano', 'uma-panela'],
+          ingredients: ['abóbora', 'lentilha', 'cebola', 'alho', 'cenoura'],
+          steps: [
+            'Refogue cebola, alho e cenoura em uma panela funda.',
+            'Adicione abobora em cubos, lentilha e agua ate cobrir.',
+            'Cozinhe ate amaciar e bata parcialmente para dar corpo.'
+          ]
+        },
+        {
+          id: 'frango-panela-limao',
+          name: 'Frango de panela com limao',
+          image: 'https://www.themealdb.com/images/media/meals/1520084413.jpg',
+          time: 28,
+          cost: 22.6,
+          servings: 3,
+          difficulty: 'media',
+          tags: ['uma-panela', 'almoco'],
+          ingredients: ['frango', 'limão', 'alho', 'arroz', 'cebola'],
+          steps: [
+            'Tempere o frango com limao, alho e sal.',
+            'Doure na panela, junte cebola e pingue agua aos poucos.',
+            'Sirva com arroz e o caldo reduzido por cima.'
+          ]
+        },
+        {
+          id: 'salada-grao-bico',
+          name: 'Salada quente de grao-de-bico',
+          image: 'https://www.themealdb.com/images/media/meals/ysxwuq1487323065.jpg',
+          time: 20,
+          cost: 17.5,
+          servings: 2,
+          difficulty: 'facil',
+          tags: ['rapido', 'vegetariano'],
+          ingredients: ['grão-de-bico', 'tomate', 'cebola', 'cenoura', 'azeite'],
+          steps: [
+            'Aqueça o grao-de-bico cozido em frigideira larga.',
+            'Entre com tomate, cebola e cenoura em cubos pequenos.',
+            'Finalize com azeite, sal e ervas.'
+          ]
+        },
+        {
+          id: 'panqueca-banana-aveia',
+          name: 'Panqueca de banana e aveia',
+          image: 'https://www.themealdb.com/images/media/meals/rwuyqx1511383174.jpg',
+          time: 10,
+          cost: 8.7,
+          servings: 2,
+          difficulty: 'facil',
+          tags: ['rapido', 'barato', 'vegetariano'],
+          ingredients: ['banana', 'aveia', 'ovos', 'leite', 'canela'],
+          steps: [
+            'Amasse banana e misture com ovos, aveia e leite.',
+            'Despeje porcoes pequenas em frigideira untada.',
+            'Doure os dois lados e finalize com canela.'
+          ]
+        },
+        {
+          id: 'risoto-tomate-feijao',
+          name: 'Risoto rustico de tomate e feijao',
+          image: 'https://www.themealdb.com/images/media/meals/1549542877.jpg',
+          time: 26,
+          cost: 13.6,
+          servings: 3,
+          difficulty: 'media',
+          tags: ['barato', 'uma-panela'],
+          ingredients: ['arroz', 'feijão', 'tomate', 'cebola', 'queijo'],
+          steps: [
+            'Refogue cebola e tomate ate quase desmanchar.',
+            'Junte arroz cozido, feijao com caldo e misture em fogo medio.',
+            'Finalize com queijo e deixe descansar por tres minutos.'
+          ]
+        },
+        {
+          id: 'tapioca-recheada',
+          name: 'Tapioca de queijo e tomate',
+          image: 'https://www.themealdb.com/images/media/meals/58oia61564916529.jpg',
+          time: 9,
+          cost: 7.9,
+          servings: 1,
+          difficulty: 'facil',
+          tags: ['rapido', 'barato', 'vegetariano'],
+          ingredients: ['tapioca', 'queijo', 'tomate', 'orégano'],
+          steps: [
+            'Espalhe a goma de tapioca em frigideira quente.',
+            'Vire quando firmar e adicione queijo, tomate e oregano.',
+            'Dobre ao meio e aqueça ate o queijo derreter.'
+          ]
+        },
+        {
+          id: 'bolinho-arroz-airfryer',
+          name: 'Bolinho de arroz sem fritura',
+          image: 'https://www.themealdb.com/images/media/meals/1529443236.jpg',
+          time: 22,
+          cost: 11.1,
+          servings: 3,
+          difficulty: 'facil',
+          tags: ['barato', 'vegetariano'],
+          ingredients: ['arroz', 'ovos', 'queijo', 'cenoura', 'farinha'],
+          steps: [
+            'Misture arroz, ovos, queijo, cenoura ralada e farinha.',
+            'Modele bolinhos compactos com as maos umidas.',
+            'Asse em forno alto ou airfryer ate dourar.'
+          ]
+        },
+        {
+          id: 'mexido-feijao-couve',
+          name: 'Mexido de feijao com couve',
+          image: 'https://www.themealdb.com/images/media/meals/wtsvxx1511296896.jpg',
+          time: 16,
+          cost: 10.5,
+          servings: 2,
+          difficulty: 'facil',
+          tags: ['rapido', 'barato', 'uma-panela'],
+          ingredients: ['feijão', 'arroz', 'couve', 'alho', 'ovos'],
+          steps: [
+            'Doure alho e junte couve fatiada.',
+            'Adicione arroz e feijao, mexendo ate aquecer.',
+            'Abra espaço na panela, cozinhe os ovos e misture.'
+          ]
+        },
+        {
+          id: 'creme-milho-frango',
+          name: 'Creme de milho com frango',
+          image: 'https://www.themealdb.com/images/media/meals/qrqywr1503066605.jpg',
+          time: 25,
+          cost: 20.3,
+          servings: 3,
+          difficulty: 'media',
+          tags: ['uma-panela', 'almoco'],
+          ingredients: ['milho', 'frango', 'leite', 'cebola', 'arroz'],
+          steps: [
+            'Bata milho com leite ate formar um creme.',
+            'Refogue cebola e frango desfiado em uma panela.',
+            'Junte o creme, cozinhe ate engrossar e sirva com arroz.'
+          ]
+        }
+      ];
+
+      const suggestions = [
+        'arroz',
+        'ovos',
+        'tomate',
+        'cebola',
+        'alho',
+        'queijo',
+        'feijão',
+        'couve',
+        'frango',
+        'banana',
+        'aveia',
+        'lentilha'
+      ];
+
+      const state = {
+        selected: ['arroz', 'ovos', 'tomate'],
+        activeFilter: null,
+        currentResults: [],
+        inspiration: null
+      };
+
+      const el = {
+        form: document.getElementById('ingredientForm'),
+        input: document.getElementById('ingredientInput'),
+        inputError: document.getElementById('inputError'),
+        selected: document.getElementById('selectedIngredients'),
+        suggestions: document.getElementById('suggestions'),
+        grid: document.getElementById('recipeGrid'),
+        empty: document.getElementById('emptyState'),
+        recipeCount: document.getElementById('recipeCount'),
+        savingScore: document.getElementById('savingScore'),
+        matchAverage: document.getElementById('matchAverage'),
+        kitchenPlan: document.getElementById('kitchenPlan'),
+        apiCard: document.getElementById('apiCard'),
+        apiStatus: document.getElementById('apiStatus'),
+        apiDot: document.getElementById('apiDot'),
+        refreshApiBtn: document.getElementById('refreshApiBtn'),
+        resetBtn: document.getElementById('resetBtn'),
+        modal: document.getElementById('recipeModal'),
+        modalTitle: document.getElementById('modalTitle'),
+        modalBody: document.getElementById('modalBody'),
+        closeModalBtn: document.getElementById('closeModalBtn')
+      };
+
+      function normalize(value) {
+        return value
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+
+      function currency(value) {
+        return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+      }
+
+      function ingredientTokens(value) {
+        return value
+          .split(/[,;\n]/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+
+      function addIngredient(raw) {
+        const name = raw.trim().replace(/\s+/g, ' ');
+        if (name.length < 2) {
+          el.inputError.textContent = 'Use pelo menos duas letras.';
+          return;
+        }
+
+        if (state.selected.some((item) => normalize(item) === normalize(name))) {
+          el.inputError.textContent = 'Ingrediente ja esta na lista.';
+          return;
+        }
+
+        state.selected.push(name);
+        el.inputError.textContent = '';
+        render();
+      }
+
+      function removeIngredient(name) {
+        state.selected = state.selected.filter((item) => normalize(item) !== normalize(name));
+        render();
+      }
+
+      function scoreRecipe(recipe) {
+        const selected = state.selected.map(normalize);
+        const recipeIngredients = recipe.ingredients.map(normalize);
+        const matches = recipeIngredients.filter((item) => selected.includes(item));
+        const missing = recipe.ingredients.filter((item) => !selected.includes(normalize(item)));
+        const matchRate = recipe.ingredients.length ? matches.length / recipe.ingredients.length : 0;
+        const filterBonus = state.activeFilter && recipe.tags.includes(state.activeFilter) ? 0.28 : 0;
+        const quickBonus = recipe.time <= 18 ? 0.08 : 0;
+        const cheapBonus = recipe.cost <= 13 ? 0.08 : 0;
+        const score = matchRate + filterBonus + quickBonus + cheapBonus;
+        return { ...recipe, matches, missing, matchRate, score };
+      }
+
+      function getResults() {
+        const ranked = recipes
+          .map(scoreRecipe)
+          .filter((recipe) => {
+            if (state.activeFilter && !recipe.tags.includes(state.activeFilter)) return false;
+            if (state.selected.length === 0) return true;
+            return recipe.matches.length > 0;
+          })
+          .sort((a, b) => b.score - a.score || a.cost - b.cost || a.time - b.time);
+
+        return ranked;
+      }
+
+      function renderSelected() {
+        el.selected.innerHTML = '';
+        state.selected.forEach((item) => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className =
+            'flex items-center gap-2 rounded-[8px] border border-olive/25 bg-olive/10 px-3 py-2 text-sm font-semibold text-olive hover:bg-olive hover:text-white';
+          chip.setAttribute('aria-label', `Remover ${item}`);
+
+          const label = document.createElement('span');
+          label.textContent = item;
+          chip.append(label);
+
+          const icon = document.createElement('i');
+          icon.setAttribute('data-lucide', 'x');
+          icon.className = 'h-3.5 w-3.5';
+          chip.append(icon);
+
+          chip.addEventListener('click', () => removeIngredient(item));
+          el.selected.append(chip);
+        });
+      }
+
+      function renderSuggestions() {
+        el.suggestions.innerHTML = '';
+        suggestions.forEach((item) => {
+          const selected = state.selected.some((ingredient) => normalize(ingredient) === normalize(item));
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.disabled = selected;
+          btn.className =
+            'rounded-[8px] border border-black/10 bg-white/45 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-olive hover:text-olive disabled:cursor-not-allowed disabled:opacity-40';
+          btn.textContent = item;
+          btn.addEventListener('click', () => addIngredient(item));
+          el.suggestions.append(btn);
+        });
+      }
+
+      function renderFilters() {
+        document.querySelectorAll('.filter-btn').forEach((button) => {
+          const active = button.dataset.filter === state.activeFilter;
+          button.classList.toggle('bg-ink', active);
+          button.classList.toggle('text-paper', active);
+          button.classList.toggle('border-ink', active);
+        });
+      }
+
+      function renderStats(results) {
+        const visible = results.length;
+        const average =
+          visible === 0
+            ? 0
+            : Math.round((results.reduce((sum, recipe) => sum + recipe.matchRate, 0) / visible) * 100);
+        const savings = results.slice(0, 3).reduce((sum, recipe) => sum + Math.max(0, 28 - recipe.cost), 0);
+
+        el.recipeCount.textContent = String(visible);
+        el.savingScore.textContent = currency(savings);
+        el.matchAverage.textContent = `${average}%`;
+      }
+
+      function renderGrid(results) {
+        el.grid.innerHTML = '';
+        el.empty.classList.toggle('hidden', results.length > 0);
+        el.empty.classList.toggle('grid', results.length === 0);
+
+        results.forEach((recipe, index) => {
+          const card = document.createElement('article');
+          card.className = 'recipe-card soft-panel overflow-hidden bg-white/55';
+          card.style.setProperty('--index', index);
+
+          const missing = recipe.missing.slice(0, 3).join(', ') || 'nada essencial';
+          const matchPercent = Math.round(recipe.matchRate * 100);
+
+          card.innerHTML = `
+            <div class="relative aspect-[4/3] overflow-hidden">
+              <img class="h-full w-full object-cover transition duration-500 hover:scale-[1.04]" src="${recipe.image}" alt="${recipe.name}" loading="lazy" />
+              <span class="absolute left-3 top-3 rounded-[8px] bg-[#fffaf0]/90 px-3 py-1 font-mono text-sm font-semibold text-ink">${matchPercent}%</span>
+            </div>
+            <div class="space-y-4 p-4">
+              <div>
+                <h3 class="line-clamp-2 text-xl font-bold leading-tight tracking-tight">${recipe.name}</h3>
+                <p class="mt-2 text-sm text-stone-600">faltam: ${missing}</p>
+              </div>
+              <div class="grid grid-cols-3 gap-2 text-sm">
+                <span class="rounded-[8px] bg-paper px-2 py-2 text-center font-mono">${recipe.time} min</span>
+                <span class="rounded-[8px] bg-paper px-2 py-2 text-center font-mono">${currency(recipe.cost)}</span>
+                <span class="rounded-[8px] bg-paper px-2 py-2 text-center font-mono">${recipe.servings} porcoes</span>
+              </div>
+              <button class="detail-btn flex w-full items-center justify-center gap-2 rounded-[8px] bg-ink px-4 py-3 font-semibold text-paper hover:bg-olive" type="button">
+                ver preparo
+                <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
+              </button>
+            </div>
+          `;
+
+          card.querySelector('.detail-btn').addEventListener('click', () => openRecipe(recipe));
+          el.grid.append(card);
+        });
+      }
+
+      function renderPlan(results) {
+        const top = results[0];
+        const second = results[1];
+        const available = state.selected.length;
+        const rows = [
+          {
+            icon: 'package-check',
+            label: 'Ingredientes selecionados',
+            value: `${available} itens`
+          },
+          {
+            icon: 'timer',
+            label: 'Receita mais rapida',
+            value: top ? `${top.name} em ${top.time} min` : 'aguardando'
+          },
+          {
+            icon: 'wallet',
+            label: 'Menor custo entre destaques',
+            value: second ? currency(Math.min(top.cost, second.cost)) : top ? currency(top.cost) : 'aguardando'
+          }
+        ];
+
+        el.kitchenPlan.innerHTML = '';
+        rows.forEach((row) => {
+          const item = document.createElement('div');
+          item.className = 'flex items-start gap-3 rounded-[8px] border border-black/10 bg-white/45 p-3';
+          item.innerHTML = `
+            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-paper text-olive">
+              <i data-lucide="${row.icon}" class="h-4 w-4"></i>
+            </span>
+            <span class="min-w-0">
+              <span class="block text-sm text-stone-600">${row.label}</span>
+              <span class="block truncate font-semibold text-ink">${row.value}</span>
+            </span>
+          `;
+          el.kitchenPlan.append(item);
+        });
+      }
+
+      function openRecipe(recipe) {
+        el.modalTitle.textContent = recipe.name;
+        const has = recipe.ingredients.filter((ingredient) =>
+          state.selected.map(normalize).includes(normalize(ingredient))
+        );
+        const missing = recipe.ingredients.filter(
+          (ingredient) => !state.selected.map(normalize).includes(normalize(ingredient))
+        );
+
+        el.modalBody.innerHTML = `
+          <div class="grid gap-5 md:grid-cols-[0.85fr_1.15fr]">
+            <img class="aspect-[4/3] h-full w-full rounded-[8px] object-cover" src="${recipe.image}" alt="${recipe.name}" />
+            <div class="space-y-5">
+              <div class="grid grid-cols-3 gap-2">
+                <div class="rounded-[8px] border border-black/10 bg-paper p-3 text-center">
+                  <span class="block font-mono text-xl font-semibold">${recipe.time}</span>
+                  <span class="text-xs text-stone-600">minutos</span>
+                </div>
+                <div class="rounded-[8px] border border-black/10 bg-paper p-3 text-center">
+                  <span class="block font-mono text-xl font-semibold">${currency(recipe.cost)}</span>
+                  <span class="text-xs text-stone-600">estimado</span>
+                </div>
+                <div class="rounded-[8px] border border-black/10 bg-paper p-3 text-center">
+                  <span class="block font-mono text-xl font-semibold">${recipe.servings}</span>
+                  <span class="text-xs text-stone-600">porcoes</span>
+                </div>
+              </div>
+              <div>
+                <h3 class="mb-2 font-bold">Ingredientes que voce ja tem</h3>
+                <div class="flex flex-wrap gap-2">${has
+                  .map((item) => `<span class="rounded-[8px] bg-olive/10 px-3 py-2 text-sm font-semibold text-olive">${item}</span>`)
+                  .join('')}</div>
+              </div>
+              <div>
+                <h3 class="mb-2 font-bold">Completar se possivel</h3>
+                <div class="flex flex-wrap gap-2">${missing
+                  .map((item) => `<span class="rounded-[8px] bg-clay/10 px-3 py-2 text-sm font-semibold text-clay">${item}</span>`)
+                  .join('')}</div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-6">
+            <h3 class="mb-3 font-bold">Preparo</h3>
+            <ol class="space-y-3">${recipe.steps
+              .map(
+                (step, index) =>
+                  `<li class="flex gap-3 rounded-[8px] border border-black/10 bg-white/55 p-3"><span class="font-mono font-semibold text-clay">${String(
+                    index + 1
+                  ).padStart(2, '0')}</span><span>${step}</span></li>`
+              )
+              .join('')}</ol>
+          </div>
+        `;
+
+        el.modal.dataset.open = 'true';
+        document.body.style.overflow = 'hidden';
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      function closeRecipe() {
+        el.modal.dataset.open = 'false';
+        document.body.style.overflow = '';
+      }
+
+      async function loadInspiration() {
+        el.apiDot.dataset.state = 'loading';
+        el.apiStatus.textContent = 'Conectando API';
+        el.apiCard.innerHTML = `
+          <div class="skeleton mb-4 aspect-[4/3] rounded-[8px]"></div>
+          <div class="skeleton mb-2 h-5 w-2/3 rounded-[8px]"></div>
+          <div class="skeleton h-4 w-full rounded-[8px]"></div>
+        `;
+
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 8000);
+
+        try {
+          const response = await fetch('https://www.themealdb.com/api/json/v1/1/random.php', {
+            signal: controller.signal
+          });
+          if (!response.ok) throw new Error('API indisponivel');
+          const payload = await response.json();
+          const meal = payload.meals?.[0];
+          if (!meal) throw new Error('Resposta vazia');
+
+          state.inspiration = meal;
+          el.apiDot.dataset.state = 'online';
+          el.apiStatus.textContent = 'API conectada';
+          renderApiMeal(meal);
+        } catch (error) {
+          el.apiDot.dataset.state = 'offline';
+          el.apiStatus.textContent = 'API em fallback';
+          renderApiFallback();
+        } finally {
+          window.clearTimeout(timeout);
+        }
+      }
+
+      function renderApiMeal(meal) {
+        el.apiCard.innerHTML = '';
+        const article = document.createElement('article');
+        article.className = 'space-y-4';
+
+        const image = document.createElement('img');
+        image.className = 'aspect-[4/3] w-full rounded-[8px] object-cover';
+        image.src = meal.strMealThumb;
+        image.alt = meal.strMeal;
+        image.loading = 'lazy';
+        article.append(image);
+
+        const content = document.createElement('div');
+        const category = [meal.strCategory, meal.strArea].filter(Boolean).join(' / ');
+        content.innerHTML = `
+          <p class="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-clay">${category}</p>
+          <h3 class="text-2xl font-bold leading-tight tracking-tight"></h3>
+          <p class="mt-2 line-clamp-2 text-sm leading-6 text-stone-600"></p>
+          <a class="mt-4 inline-flex items-center gap-2 rounded-[8px] bg-ink px-4 py-3 text-sm font-semibold text-paper hover:bg-olive" target="_blank" rel="noreferrer">
+            abrir receita
+            <i data-lucide="external-link" class="h-4 w-4"></i>
+          </a>
+        `;
+        content.querySelector('h3').textContent = meal.strMeal;
+        content.querySelector('p.line-clamp-2').textContent =
+          meal.strInstructions || 'Receita internacional carregada diretamente da API publica.';
+        const link = content.querySelector('a');
+        link.href = meal.strSource || meal.strYoutube || 'https://www.themealdb.com/';
+        article.append(content);
+        el.apiCard.append(article);
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      function renderApiFallback() {
+        el.apiCard.innerHTML = `
+          <div class="space-y-4">
+            <img class="aspect-[4/3] w-full rounded-[8px] object-cover" src="https://picsum.photos/seed/chef-zero-fallback/900/650" alt="Mesa de cozinha preparada" loading="lazy" />
+            <div>
+              <p class="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-clay">fallback local</p>
+              <h3 class="text-2xl font-bold leading-tight tracking-tight">Cozinha continua ativa</h3>
+              <p class="mt-2 text-sm leading-6 text-stone-600">A API externa nao respondeu agora. A busca por ingredientes segue operando com a base local.</p>
+            </div>
+          </div>
+        `;
+      }
+
+      function render() {
+        const results = getResults();
+        state.currentResults = results;
+        renderSelected();
+        renderSuggestions();
+        renderFilters();
+        renderStats(results);
+        renderGrid(results);
+        renderPlan(results);
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      el.form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const tokens = ingredientTokens(el.input.value);
+        if (tokens.length === 0) {
+          el.inputError.textContent = 'Informe um ingrediente para adicionar.';
+          return;
+        }
+        tokens.forEach(addIngredient);
+        el.input.value = '';
+      });
+
+      document.querySelectorAll('.filter-btn').forEach((button) => {
+        button.addEventListener('click', () => {
+          state.activeFilter = state.activeFilter === button.dataset.filter ? null : button.dataset.filter;
+          render();
+        });
+      });
+
+      el.resetBtn.addEventListener('click', () => {
+        state.selected = [];
+        state.activeFilter = null;
+        el.inputError.textContent = '';
+        render();
+      });
+
+      el.refreshApiBtn.addEventListener('click', loadInspiration);
+      el.closeModalBtn.addEventListener('click', closeRecipe);
+      el.modal.addEventListener('click', (event) => {
+        if (event.target === el.modal) closeRecipe();
+      });
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeRecipe();
+      });
+
+      render();
+      loadInspiration();
+    </script>
+  </body>
+</html>
